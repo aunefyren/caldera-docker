@@ -49,8 +49,10 @@ jobs:
       - name: Build AMD64 image
         run: |
           docker buildx create --use
-          docker buildx build --build-arg CALDERA_VERSION=${{ needs.check-version.outputs.current_version }} --platform linux/amd64 -t ghcr.io/${{github.actor}}/caldera-music:amd64 --push .
-          docker buildx build --build-arg CALDERA_VERSION=${{ needs.check-version.outputs.current_version }} --platform linux/amd64 -t ghcr.io/${{github.actor}}/caldera-music:amd64-${{ needs.check-version.outputs.current_version }} --push .
+          docker buildx build --build-arg CALDERA_VERSION=${{ needs.check-version.outputs.current_version }} --platform linux/amd64 \
+            -t ghcr.io/${{github.actor}}/caldera-music:amd64 \
+            -t ghcr.io/${{github.actor}}/caldera-music:amd64-${{ needs.check-version.outputs.current_version }} \
+            --push .
 
   build-arm64:
     needs: check-version
@@ -71,8 +73,10 @@ jobs:
       - name: Build ARM64 image
         run: |
           docker buildx create --use
-          docker buildx build --build-arg CALDERA_VERSION=${{ needs.check-version.outputs.current_version }} --platform linux/arm64 -t ghcr.io/${{github.actor}}/caldera-music:arm64v8 --push .
-          docker buildx build --build-arg CALDERA_VERSION=${{ needs.check-version.outputs.current_version }} --platform linux/arm64 -t ghcr.io/${{github.actor}}/caldera-music:arm64v8-${{ needs.check-version.outputs.current_version }} --push .
+          docker buildx build --build-arg CALDERA_VERSION=${{ needs.check-version.outputs.current_version }} --platform linux/arm64 \
+            -t ghcr.io/${{github.actor}}/caldera-music:arm64v8 \
+            -t ghcr.io/${{github.actor}}/caldera-music:arm64v8-${{ needs.check-version.outputs.current_version }} \
+            --push .
 
   build-arm32:
     needs: check-version
@@ -93,8 +97,10 @@ jobs:
       - name: Build ARM32v7 image
         run: |
           docker buildx create --use
-          docker buildx build --build-arg CALDERA_VERSION=${{ needs.check-version.outputs.current_version }} --platform linux/arm/v7 -t ghcr.io/${{github.actor}}/caldera-music:arm32v7 --push .
-          docker buildx build --build-arg CALDERA_VERSION=${{ needs.check-version.outputs.current_version }} --platform linux/arm/v7 -t ghcr.io/${{github.actor}}/caldera-music:arm32v7-${{ needs.check-version.outputs.current_version }} --push .
+          docker buildx build --build-arg CALDERA_VERSION=${{ needs.check-version.outputs.current_version }} --platform linux/arm/v7 \
+            -t ghcr.io/${{github.actor}}/caldera-music:arm32v7 \
+            -t ghcr.io/${{github.actor}}/caldera-music:arm32v7-${{ needs.check-version.outputs.current_version }} \
+            --push .
 
   create-manifests:
     needs: [check-version, build-amd64, build-arm64, build-arm32]
@@ -166,5 +172,10 @@ jobs:
           echo $CURRENT_VERSION_JSON > version.json
           git config --global user.name "Version updater"
           git config --global user.email "edd933a9@duck.com"
-          git commit -am "upd: version bump to ${{ needs.check-version.outputs.current_version }}"
+          # [skip ci]: this push would otherwise be a candidate for build_on_push,
+          # rebuilding and re-pushing tags that were just published. GITHUB_TOKEN
+          # pushes do not trigger workflows today, so this is belt-and-braces --
+          # it keeps the loop closed if the token is ever swapped for a PAT or a
+          # deploy key, which is exactly when the loop would become real.
+          git commit -am "upd: version bump to ${{ needs.check-version.outputs.current_version }} [skip ci]"
           git push

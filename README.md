@@ -71,6 +71,8 @@ daemon appears as a Plex player on your network.
 | `CALDERA_DEVICE`       | ALSA output device UID. List them with `--list-devices` (below).                   |
 | `CALDERA_EXTRA_ARGS`   | Extra flags passed verbatim, e.g. `--sample-rate 96000 --verbose`.                 |
 | `CALDERA_CONFIG`       | Config directory inside the container. Defaults to `/config`.                      |
+| `PUID`                 | User id to run the daemon as. Unset means root. See below.                         |
+| `PGID`                 | Group id to run the daemon as. Unset means root. See below.                        |
 
 Any arguments passed to the container are forwarded to the daemon instead of
 starting it, which is how one-off commands work:
@@ -78,6 +80,32 @@ starting it, which is how one-off commands work:
 ```bash
 docker run --rm --device /dev/snd ghcr.io/aunefyren/caldera-music:latest --list-devices
 ```
+
+## Running as a non-root user
+
+By default the container runs as root, which is what this image has always
+done. Set `PUID` and `PGID` to run the daemon as an ordinary user instead:
+
+```yaml
+    environment:
+      - PUID=1000
+      - PGID=1000
+```
+
+The entrypoint creates (or adopts) that uid/gid, hands it ownership of the
+config volume, and then drops privileges before starting the daemon.
+
+Audio keeps working: the entrypoint reads the group of each node under
+`/dev/snd`, recreates those groups inside the container, and joins them. That
+is the part people usually have to solve by hand with `group_add`, because a
+host audio gid normally has no counterpart in the container.
+
+Notes:
+
+- Both default to `0` if only one is given, so set them together.
+- `PUID=0` / `PGID=0` explicitly keeps root.
+- The recursive `chown` of the config volume is skipped when ownership already
+  matches, so a large warm cache is not re-walked on every restart.
 
 ## Ports
 
@@ -93,8 +121,9 @@ docker run --rm --device /dev/snd ghcr.io/aunefyren/caldera-music:latest --list-
   several nodes to stay in lock-step, add `network_mode: host` and remove the
   port bindings. A single standalone player works fine on the default bridge.
 - **Audio requires access to the host sound device.** Map `/dev/snd` as shown.
-  Some setups additionally need `group_add` for the host's `audio` group, or
-  `privileged: true` as a blunter fallback.
+  Running as root, that is enough. Running with `PUID`/`PGID`, the entrypoint
+  joins the host's sound groups for you, so `group_add` should not be needed;
+  `privileged: true` remains the blunt fallback if a setup still refuses.
 - **Auto-updates are disabled in this image, deliberately.** Upstream, the
   daemon updates itself in place; in a container those writes land in the
   ephemeral layer, vanish on recreate, and get re-downloaded after every

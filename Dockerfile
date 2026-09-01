@@ -62,10 +62,17 @@ FROM debian:trixie-slim
 # libasound2 is the t64 package in trixie. FFmpeg ships inside the tarball, so
 # ALSA plus the C++ runtime is the whole dependency list -- the binary needs at
 # most GLIBC 2.30, well under trixie's.
+#
+# passwd (useradd/groupadd/usermod) and util-linux (setpriv) back the PUID/PGID
+# privilege drop in the entrypoint. Both are priority:required in Debian and so
+# are already in the base image; naming them makes the dependency explicit and
+# survives a future slimming of that base.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         ca-certificates \
         libasound2t64 \
         libstdc++6 \
+        passwd \
+        util-linux \
         zlib1g \
     && rm -rf /var/lib/apt/lists/*
 

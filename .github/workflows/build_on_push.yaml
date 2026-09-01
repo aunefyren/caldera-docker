@@ -37,8 +37,10 @@ jobs:
       - name: Build AMD64 image
         run: |
           docker buildx create --use
-          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/amd64 -t ghcr.io/${{github.actor}}/caldera-music:amd64 --push .
-          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/amd64 -t ghcr.io/${{github.actor}}/caldera-music:amd64-${{ needs.get-version.outputs.current_version }} --push .
+          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/amd64 \
+            -t ghcr.io/${{github.actor}}/caldera-music:amd64 \
+            -t ghcr.io/${{github.actor}}/caldera-music:amd64-${{ needs.get-version.outputs.current_version }} \
+            --push .
 
   build-arm64:
     needs: get-version
@@ -58,8 +60,10 @@ jobs:
       - name: Build ARM64 image
         run: |
           docker buildx create --use
-          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/arm64 -t ghcr.io/${{github.actor}}/caldera-music:arm64v8 --push .
-          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/arm64 -t ghcr.io/${{github.actor}}/caldera-music:arm64v8-${{ needs.get-version.outputs.current_version }} --push .
+          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/arm64 \
+            -t ghcr.io/${{github.actor}}/caldera-music:arm64v8 \
+            -t ghcr.io/${{github.actor}}/caldera-music:arm64v8-${{ needs.get-version.outputs.current_version }} \
+            --push .
 
   build-arm32:
     needs: get-version
@@ -79,8 +83,10 @@ jobs:
       - name: Build ARM32v7 image
         run: |
           docker buildx create --use
-          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/arm/v7 -t ghcr.io/${{github.actor}}/caldera-music:arm32v7 --push .
-          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/arm/v7 -t ghcr.io/${{github.actor}}/caldera-music:arm32v7-${{ needs.get-version.outputs.current_version }} --push .
+          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/arm/v7 \
+            -t ghcr.io/${{github.actor}}/caldera-music:arm32v7 \
+            -t ghcr.io/${{github.actor}}/caldera-music:arm32v7-${{ needs.get-version.outputs.current_version }} \
+            --push .
 
   create-manifests:
     needs: [get-version, build-amd64, build-arm64, build-arm32]
