@@ -78,6 +78,17 @@ services:
     restart: unless-stopped
 ```
 
+Note the unquoted values. In Compose's `- KEY=value` list form, quotes are kept
+as part of the value, so `- CALDERA_PLAYER_NAME="Living Room"` produces a player
+literally named `"Living Room"`, and a quoted `CALDERA_DEVICE` becomes an ALSA
+device name that does not exist. Spaces need no quoting in this form. If you
+prefer quotes, use the mapping form instead, which strips them:
+
+```yaml
+    environment:
+      CALDERA_PLAYER_NAME: "Living Room"
+```
+
 Control playback by casting from Plexamp, Plex iOS, or the Plex web app - the
 daemon appears as a Plex player on your network.
 
@@ -151,10 +162,14 @@ reason: use `network_mode: host`.
   host such as PipeWire or PulseAudio, or you set `PUID`/`PGID` and the sound
   groups did not resolve. Check what the host itself sees with `aplay -l`, and
   what the container sees with `--list-devices`.
-- **Audio requires access to the host sound device.** Map `/dev/snd` as shown.
-  Running as root, that is enough. Running with `PUID`/`PGID`, the entrypoint
-  joins the host's sound groups for you, so `group_add` should not be needed;
-  `privileged: true` remains the blunt fallback if a setup still refuses.
+- **`/dev/snd` is needed to play audio, not to run the daemon.** Without it the
+  container still starts, registers with Plex, binds all its ports and waits for
+  commands -- it simply has no local output to play to. Map it for any instance
+  that drives speakers or a DAC, which is the normal case and what the compose
+  file above assumes. Running as root, mapping it is enough. Running with
+  `PUID`/`PGID`, the entrypoint joins the host's sound groups for you, so
+  `group_add` should not be needed; `privileged: true` remains the blunt
+  fallback if a setup still refuses.
 - **The audio cache lives in the config volume**, at `/config/cache`. Upstream
   it defaults to `$HOME/.cache`, which in a container is lost on every recreate
   and is unwritable under `PUID`/`PGID`; this image points it at `/config`
