@@ -77,7 +77,12 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 COPY --from=fetch /out /opt/caldera-music
-COPY entrypoint.sh /usr/local/bin/entrypoint.sh
+
+# --chmod is required, not cosmetic: this repo is normally checked out on a
+# Windows/WSL mount where the executable bit does not survive, so entrypoint.sh
+# is committed as 0644 and a plain COPY yields "permission denied" at startup.
+# Setting the mode here makes the image independent of the source file's mode.
+COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint.sh
 
 ENV LD_LIBRARY_PATH=/opt/caldera-music/lib \
     CALDERA_CONFIG=/config
