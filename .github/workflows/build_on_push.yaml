@@ -15,8 +15,8 @@ jobs:
       - name: Get current version
         id: get_version
         run: |
-          CURRENT_VERSION_JSON=`curl -s https://plexamp.plex.tv/headless/version.json`
-          CURRENT_VERSION=`echo $CURRENT_VERSION_JSON | jq -r .latestVersion`
+          CURRENT_VERSION_JSON=`curl -s https://releases.caldera.homes/music/headless/latest/latest.json`
+          CURRENT_VERSION=`echo $CURRENT_VERSION_JSON | jq -r .version`
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
 
   build-amd64:
@@ -32,13 +32,13 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{github.actor}}
-          password: ${{secrets.GITHUB_TOKEN}}
+          password: ${{secrets.GIT_HUB_TOKEN}}
 
       - name: Build AMD64 image
         run: |
           docker buildx create --use
-          docker buildx build --platform linux/amd64 -t ghcr.io/${{github.actor}}/plexamp:amd64 --push .
-          docker buildx build --platform linux/amd64 -t ghcr.io/${{github.actor}}/plexamp:amd64-${{ needs.get-version.outputs.current_version }} --push .
+          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/amd64 -t ghcr.io/${{github.actor}}/caldera-music:amd64 --push .
+          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/amd64 -t ghcr.io/${{github.actor}}/caldera-music:amd64-${{ needs.get-version.outputs.current_version }} --push .
 
   build-arm64:
     needs: get-version
@@ -53,13 +53,13 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{github.actor}}
-          password: ${{secrets.GITHUB_TOKEN}}
+          password: ${{secrets.GIT_HUB_TOKEN}}
 
       - name: Build ARM64 image
         run: |
           docker buildx create --use
-          docker buildx build --platform linux/arm64 -t ghcr.io/${{github.actor}}/plexamp:arm64v8 --push .
-          docker buildx build --platform linux/arm64 -t ghcr.io/${{github.actor}}/plexamp:arm64v8-${{ needs.get-version.outputs.current_version }} --push .
+          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/arm64 -t ghcr.io/${{github.actor}}/caldera-music:arm64v8 --push .
+          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/arm64 -t ghcr.io/${{github.actor}}/caldera-music:arm64v8-${{ needs.get-version.outputs.current_version }} --push .
 
   build-arm32:
     needs: get-version
@@ -74,13 +74,13 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{github.actor}}
-          password: ${{secrets.GITHUB_TOKEN}}
+          password: ${{secrets.GIT_HUB_TOKEN}}
 
       - name: Build ARM32v7 image
         run: |
           docker buildx create --use
-          docker buildx build --platform linux/arm/v7 -f Dockerfile.arm32v7 -t ghcr.io/${{github.actor}}/plexamp:arm32v7 --push .
-          docker buildx build --platform linux/arm/v7 -f Dockerfile.arm32v7 -t ghcr.io/${{github.actor}}/plexamp:arm32v7-${{ needs.get-version.outputs.current_version }} --push .
+          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/arm/v7 -t ghcr.io/${{github.actor}}/caldera-music:arm32v7 --push .
+          docker buildx build --build-arg CALDERA_VERSION=${{ needs.get-version.outputs.current_version }} --platform linux/arm/v7 -t ghcr.io/${{github.actor}}/caldera-music:arm32v7-${{ needs.get-version.outputs.current_version }} --push .
 
   create-manifests:
     needs: [get-version, build-amd64, build-arm64, build-arm32]
@@ -92,15 +92,15 @@ jobs:
         with:
           registry: ghcr.io
           username: ${{github.actor}}
-          password: ${{secrets.GITHUB_TOKEN}}
+          password: ${{secrets.GIT_HUB_TOKEN}}
 
       - name: Create multi-arch manifests
         run: |
-          docker buildx imagetools create -t ghcr.io/${{github.actor}}/plexamp:latest \
-            ghcr.io/${{github.actor}}/plexamp:amd64 \
-            ghcr.io/${{github.actor}}/plexamp:arm64v8 \
-            ghcr.io/${{github.actor}}/plexamp:arm32v7
-          docker buildx imagetools create -t ghcr.io/${{github.actor}}/plexamp:${{ needs.get-version.outputs.current_version }} \
-            ghcr.io/${{github.actor}}/plexamp:amd64-${{ needs.get-version.outputs.current_version }} \
-            ghcr.io/${{github.actor}}/plexamp:arm64v8-${{ needs.get-version.outputs.current_version }} \
-            ghcr.io/${{github.actor}}/plexamp:arm32v7-${{ needs.get-version.outputs.current_version }}
+          docker buildx imagetools create -t ghcr.io/${{github.actor}}/caldera-music:latest \
+            ghcr.io/${{github.actor}}/caldera-music:amd64 \
+            ghcr.io/${{github.actor}}/caldera-music:arm64v8 \
+            ghcr.io/${{github.actor}}/caldera-music:arm32v7
+          docker buildx imagetools create -t ghcr.io/${{github.actor}}/caldera-music:${{ needs.get-version.outputs.current_version }} \
+            ghcr.io/${{github.actor}}/caldera-music:amd64-${{ needs.get-version.outputs.current_version }} \
+            ghcr.io/${{github.actor}}/caldera-music:arm64v8-${{ needs.get-version.outputs.current_version }} \
+            ghcr.io/${{github.actor}}/caldera-music:arm32v7-${{ needs.get-version.outputs.current_version }}
