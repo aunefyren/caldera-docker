@@ -5,16 +5,22 @@ on:
     - cron: "0 * * * *"
   workflow_dispatch:
 
+# Least privilege by default; jobs opt up to what they actually need.
+permissions:
+  contents: read
+
 jobs:
   check-version:
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
     outputs:
       trigger_workflow: ${{ steps.compare_versions.outputs.trigger_workflow }}
       current_version: ${{ steps.compare_versions.outputs.current_version }}
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Compare versions
         id: compare_versions
@@ -34,13 +40,16 @@ jobs:
     needs: check-version
     if: needs.check-version.outputs.trigger_workflow == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{github.actor}}
@@ -58,13 +67,16 @@ jobs:
     needs: check-version
     if: needs.check-version.outputs.trigger_workflow == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{github.actor}}
@@ -82,13 +94,16 @@ jobs:
     needs: check-version
     if: needs.check-version.outputs.trigger_workflow == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{github.actor}}
@@ -106,10 +121,12 @@ jobs:
     needs: [check-version, build-amd64, build-arm64, build-arm32]
     if: needs.check-version.outputs.trigger_workflow == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      packages: write
 
     steps:
       - name: Login to GitHub Container Registry
-        uses: docker/login-action@v3
+        uses: docker/login-action@v4
         with:
           registry: ghcr.io
           username: ${{github.actor}}
@@ -130,14 +147,19 @@ jobs:
     needs: [check-version, create-manifests]
     if: needs.check-version.outputs.trigger_workflow == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Create GitHub Release
-        uses: softprops/action-gh-release@v1
+        uses: softprops/action-gh-release@v3
         with:
+          # Without this the action falls back to GITHUB_TOKEN; the PAT keeps
+          # the release working regardless of the repo's default permissions.
+          token: ${{ secrets.GIT_HUB_TOKEN }}
           tag_name: ${{ needs.check-version.outputs.current_version }}
           name: Caldera Music ${{ needs.check-version.outputs.current_version }}
           body: |
@@ -161,10 +183,16 @@ jobs:
     needs: [check-version, create-release]
     if: needs.check-version.outputs.trigger_workflow == 'true'
     runs-on: ubuntu-latest
+    permissions:
+      contents: write
 
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
+        with:
+          # Persist the PAT as the push credential, so the version bump
+          # does not depend on GITHUB_TOKEN having contents: write.
+          token: ${{ secrets.GIT_HUB_TOKEN }}
 
       - name: Update local version
         run: |
@@ -172,10 +200,10 @@ jobs:
           echo $CURRENT_VERSION_JSON > version.json
           git config --global user.name "Version updater"
           git config --global user.email "edd933a9@duck.com"
-          # [skip ci]: this push would otherwise be a candidate for build_on_push,
-          # rebuilding and re-pushing tags that were just published. GITHUB_TOKEN
-          # pushes do not trigger workflows today, so this is belt-and-braces --
-          # it keeps the loop closed if the token is ever swapped for a PAT or a
-          # deploy key, which is exactly when the loop would become real.
+          # [skip ci] is load-bearing. GITHUB_TOKEN pushes cannot trigger further
+          # workflow runs, but this pushes with a PAT, and PAT pushes can. Without
+          # the marker this commit fires build_on_push, which rebuilds and
+          # re-pushes the tags create-manifests just published. Do not remove it
+          # unless this job goes back to GITHUB_TOKEN.
           git commit -am "upd: version bump to ${{ needs.check-version.outputs.current_version }} [skip ci]"
           git push
