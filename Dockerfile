@@ -63,11 +63,18 @@ FROM debian:trixie-slim
 # ALSA plus the C++ runtime is the whole dependency list -- the binary needs at
 # most GLIBC 2.30, well under trixie's.
 #
+# alsa-ucm-conf and alsa-topology-conf are only Recommends of libasound2-data,
+# so --no-install-recommends drops them. Plenty of cards need their UCM profiles
+# to enumerate at all, and the symptom is "No audio output devices found" rather
+# than anything naming ALSA, so they are worth the ~200 kB.
+#
 # passwd (useradd/groupadd/usermod) and util-linux (setpriv) back the PUID/PGID
 # privilege drop in the entrypoint. Both are priority:required in Debian and so
 # are already in the base image; naming them makes the dependency explicit and
 # survives a future slimming of that base.
 RUN apt-get update && apt-get install -y --no-install-recommends \
+        alsa-topology-conf \
+        alsa-ucm-conf \
         ca-certificates \
         libasound2t64 \
         libstdc++6 \
@@ -84,13 +91,24 @@ COPY --from=fetch /out /opt/caldera-music
 # Setting the mode here makes the image independent of the source file's mode.
 COPY --chmod=0755 entrypoint.sh /usr/local/bin/entrypoint.sh
 
+# XDG_CACHE_HOME keeps the audio cache inside the config volume. Left alone the
+# daemon puts it in $HOME/.cache, which in a container means /root/.cache: lost
+# on every recreate, and unwritable once PUID/PGID drop us to a user whose home
+# does not exist. Pointing it at /config fixes persistence and permissions at
+# once, since the entrypoint already owns that path.
 ENV LD_LIBRARY_PATH=/opt/caldera-music/lib \
-    CALDERA_CONFIG=/config
+    CALDERA_CONFIG=/config \
+    XDG_CACHE_HOME=/config/cache
 
 VOLUME /config
 
-# 32500/tcp Plex Companion (control), 9999/udp xita multi-room audio.
+# 32500/tcp Plex Companion control, 32412/udp GDM discovery (how Plex clients
+# find this player), 9999/udp xita multi-room audio, 44201/udp Snapjack node
+# discovery. The two discovery ports are multicast and do not usefully cross a
+# bridge network -- see network_mode: host in the README.
 EXPOSE 32500
+EXPOSE 32412/udp
 EXPOSE 9999/udp
+EXPOSE 44201/udp
 
 ENTRYPOINT ["/usr/local/bin/entrypoint.sh"]

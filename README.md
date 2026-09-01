@@ -22,18 +22,35 @@ token, which does not expire in four minutes - so unlike the old Plexamp image,
 a slow first pull can no longer cause a failed start.
 
 Authenticate once, interactively. The token is written to your config volume and
-reused on every subsequent start:
+reused on every subsequent start.
+
+If you already have the compose file below, the simplest way is to let Compose
+supply the volume, devices and environment:
+
+```bash
+docker compose run --rm caldera-music --login --player-name "Living Room"
+```
+
+Or standalone:
 
 ```bash
 docker run --rm -it \
   -v ./config:/config \
+  --device /dev/snd \
   ghcr.io/aunefyren/caldera-music:latest --login --player-name "Living Room"
 ```
 
 This prints a QR code plus a short code to enter at
 [plex.tv/link](https://plex.tv/link); you have 15 minutes to complete it. The
-`-it` flags matter, since without a TTY you cannot see the code. Once it
-completes, start the container normally, with no `CALDERA_TOKEN` set.
+`-it` flags matter, since without a TTY you cannot see the code.
+
+`--device /dev/snd` matters too: after the PIN step, `--login` goes on to pick an
+audio output, and with no sound devices visible it stops with "No audio output
+devices found" and `Setup aborted. Token saved`. The token really is saved at
+that point, so re-running the command with the device mapped picks up where it
+left off and skips the PIN.
+
+Once it completes, start the container normally, with no `CALDERA_TOKEN` set.
 
 If you already have a Plex auth token, skip the interactive step and set
 `CALDERA_TOKEN` instead (see below).
@@ -55,7 +72,9 @@ services:
       # - CALDERA_TOKEN=xxxxxxxxxxxxxxxxxxxx
     ports:
       - 32500:32500
+      - 32412:32412/udp
       - 9999:9999/udp
+      - 44201:44201/udp
     restart: unless-stopped
 ```
 
@@ -109,10 +128,16 @@ Notes:
 
 ## Ports
 
-| Port        | Purpose                                        |
-| ----------- | ---------------------------------------------- |
-| `32500/tcp` | Plex Companion - remote control                 |
-| `9999/udp`  | xita - multi-room audio between Caldera nodes   |
+| Port         | Purpose                                                      |
+| ------------ | ------------------------------------------------------------ |
+| `32500/tcp`  | Plex Companion - remote control                                |
+| `32412/udp`  | GDM discovery - how Plex clients find this player              |
+| `9999/udp`   | xita - multi-room audio between Caldera nodes                  |
+| `44201/udp`  | Snapjack - node discovery (multicast `224.0.0.234`)            |
+
+The two discovery ports are multicast and do not usefully cross Docker's bridge
+network. If the player does not appear in your Plex apps, that is the usual
+reason: use `network_mode: host`.
 
 ## Remarks
 
@@ -120,10 +145,21 @@ Notes:
   multicast, which does not cross Docker's default bridge network. If you want
   several nodes to stay in lock-step, add `network_mode: host` and remove the
   port bindings. A single standalone player works fine on the default bridge.
+- **"No audio output devices found".** The container can see no ALSA device.
+  Either `/dev/snd` was not mapped into that particular `docker run` (easy to
+  miss on a one-off `--login`), or the card is held open by something on the
+  host such as PipeWire or PulseAudio, or you set `PUID`/`PGID` and the sound
+  groups did not resolve. Check what the host itself sees with `aplay -l`, and
+  what the container sees with `--list-devices`.
 - **Audio requires access to the host sound device.** Map `/dev/snd` as shown.
   Running as root, that is enough. Running with `PUID`/`PGID`, the entrypoint
   joins the host's sound groups for you, so `group_add` should not be needed;
   `privileged: true` remains the blunt fallback if a setup still refuses.
+- **The audio cache lives in the config volume**, at `/config/cache`. Upstream
+  it defaults to `$HOME/.cache`, which in a container is lost on every recreate
+  and is unwritable under `PUID`/`PGID`; this image points it at `/config`
+  instead. It is bounded by the `cache.maxSizeBytes` preference, 512 MiB by
+  default, so size your volume with that in mind.
 - **Auto-updates are disabled in this image, deliberately.** Upstream, the
   daemon updates itself in place; in a container those writes land in the
   ephemeral layer, vanish on recreate, and get re-downloaded after every
