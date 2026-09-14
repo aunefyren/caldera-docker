@@ -5,6 +5,15 @@ on:
     - cron: "0 * * * *"
   workflow_dispatch:
 
+# Both publishing workflows push the same floating per-arch tags
+# (:amd64, :arm64v8, :arm32v7), which create-manifests later assembles into
+# :latest. Overlapping runs would interleave those pushes, so serialise them
+# across BOTH workflows via a shared group. Never cancel in progress: killing a
+# run mid-publish is what leaves the tags skewed in the first place.
+concurrency:
+  group: ghcr-publish
+  cancel-in-progress: false
+
 # Least privilege by default; jobs opt up to what they actually need.
 permissions:
   contents: read
@@ -25,16 +34,48 @@ jobs:
       - name: Compare versions
         id: compare_versions
         run: |
+          # pipefail so an upstream blip fails here loudly instead of yielding a
+          # "null" version that only blows up three build jobs later.
+          set -o pipefail
+
+          BASE=https://releases.caldera.homes/music/headless/latest
+
           PREVIOUS_VERSION_JSON=`cat version.json`
-          CURRENT_VERSION_JSON=`curl -s https://releases.caldera.homes/music/headless/latest/latest.json`
+          CURRENT_VERSION_JSON=`curl -sSf $BASE/latest.json`
           CURRENT_VERSION=`echo $CURRENT_VERSION_JSON | jq -r .version`
 
-          if [ "$PREVIOUS_VERSION_JSON" != "$CURRENT_VERSION_JSON" ]; then
-            echo "trigger_workflow=true" >> $GITHUB_OUTPUT
-          else
-            echo "trigger_workflow=false" >> $GITHUB_OUTPUT
-          fi
           echo "current_version=$CURRENT_VERSION" >> $GITHUB_OUTPUT
+
+          if [ "$PREVIOUS_VERSION_JSON" = "$CURRENT_VERSION_JSON" ]; then
+            echo "already on $CURRENT_VERSION; nothing to do"
+            echo "trigger_workflow=false" >> $GITHUB_OUTPUT
+            exit 0
+          fi
+
+          # Upstream serves every arch out of the same rolling latest/ prefix, and
+          # the per-arch tarballs do not always flip in lockstep with latest.json
+          # (run 34775203667: latest.json said 1.1.0 while aarch64 still served
+          # 1.0.47). Building on a skewed prefix burns three jobs, trips the
+          # Dockerfile version guard, and strands the floating per-arch tags on two
+          # different releases until the next good run. Confirm all three arches
+          # actually serve $CURRENT_VERSION first; if not, hold and let the next
+          # hourly poll pick it up once upstream has settled.
+          for arch in x86_64 aarch64 armv7; do
+            if ! ACTUAL=`curl -sSfL "$BASE/caldera-music-linux-$arch.tar.gz" | tar xzO ./VERSION`; then
+              echo "::warning::could not read VERSION for $arch; holding for the next poll"
+              echo "trigger_workflow=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            if [ "$ACTUAL" != "$CURRENT_VERSION" ]; then
+              echo "::warning::upstream skew: latest.json says $CURRENT_VERSION but $arch serves $ACTUAL; holding for the next poll"
+              echo "trigger_workflow=false" >> $GITHUB_OUTPUT
+              exit 0
+            fi
+            echo "$arch serves $ACTUAL"
+          done
+
+          echo "all arches agree on $CURRENT_VERSION; triggering build"
+          echo "trigger_workflow=true" >> $GITHUB_OUTPUT
 
   build-amd64:
     needs: check-version

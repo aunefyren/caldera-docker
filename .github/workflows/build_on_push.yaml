@@ -5,6 +5,15 @@ on:
     branches:
       - main
 
+# Both publishing workflows push the same floating per-arch tags
+# (:amd64, :arm64v8, :arm32v7), which create-manifests later assembles into
+# :latest. Overlapping runs would interleave those pushes, so serialise them
+# across BOTH workflows via a shared group. Never cancel in progress: killing a
+# run mid-publish is what leaves the tags skewed in the first place.
+concurrency:
+  group: ghcr-publish
+  cancel-in-progress: false
+
 # Least privilege by default; jobs opt up to what they actually need.
 permissions:
   contents: read
